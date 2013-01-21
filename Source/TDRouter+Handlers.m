@@ -556,6 +556,9 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
                                                          error: NULL]);
 }
 
+- (TDStatus)do_OPTIONS: (TD_Database *)db docID:(NSString *)docID {
+    return kTDStatusOK;
+}
 
 - (TDStatus) do_GET: (TD_Database*)db docID: (NSString*)docID {
     // http://wiki.apache.org/couchdb/HTTP_Document_API#GET

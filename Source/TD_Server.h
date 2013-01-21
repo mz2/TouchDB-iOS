@@ -28,6 +28,8 @@
 
 @property (readonly) NSString* directory;
 
+@property (readwrite, strong) NSDictionary *customHTTPHeaders;
+
 - (void) queue: (void(^)())block;
 - (void) tellDatabaseManager: (void (^)(TD_DatabaseManager*))block;
 - (void) tellDatabaseNamed: (NSString*)dbName to: (void (^)(TD_Database*))block;
