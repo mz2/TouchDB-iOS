@@ -334,10 +334,10 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
 - (void) reachabilityChanged: (TDReachability*)host {
     LogTo(Sync, @"%@: Reachability state = %@ (%02X)", self, host, host.reachabilityFlags);
 
-    if (host.reachable)
+//    if (host.reachable)
         [self goOnline];
-    else if (host.reachabilityKnown)
-        [self goOffline];
+//    else if (host.reachabilityKnown)
+//        [self goOffline];
 }
 
 

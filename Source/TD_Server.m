@@ -24,7 +24,7 @@
 
 
 @implementation TD_Server
-
+@synthesize customHTTPHeaders;
 
 #if DEBUG
 + (TD_Server*) createEmptyAtPath: (NSString*)path {
