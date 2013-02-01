@@ -188,7 +188,7 @@ static int findCommonAncestor(TD_Revision* rev, NSArray* possibleIDs);
     
     // Call _revs_diff on the target db:
     [self asyncTaskStarted];
-    [self sendAsyncRequest: @"POST" path: @"/_revs_diff" body: diffs
+    [self sendAsyncRequest: @"POST" path: @"_revs_diff" body: diffs
               onCompletion:^(NSDictionary* results, NSError* error) {
         if (error) {
             self.error = error;
@@ -264,7 +264,7 @@ static int findCommonAncestor(TD_Revision* rev, NSArray* possibleIDs);
     self.changesTotal += numDocsToSend;
     [self asyncTaskStarted];
     [self sendAsyncRequest: @"POST"
-                      path: @"/_bulk_docs"
+                      path: @"_bulk_docs"
                       body: $dict({@"docs", docsToSend},
                                   {@"new_edits", $false})
               onCompletion: ^(NSDictionary* response, NSError *error) {
@@ -332,10 +332,9 @@ static int findCommonAncestor(TD_Revision* rev, NSArray* possibleIDs);
     self.changesTotal++;
     [self asyncTaskStarted];
 
-    NSString* path = $sprintf(@"/%@?new_edits=false", TDEscapeID(rev.docID));
-    NSString* urlStr = [_remote.absoluteString stringByAppendingString: path];
+    NSString* path = $sprintf(@"%@?new_edits=false", TDEscapeID(rev.docID));
     __block TDMultipartUploader* uploader = [[TDMultipartUploader alloc]
-                                  initWithURL: [NSURL URLWithString: urlStr]
+                                  initWithURL: TDAppendToURL(_remote, path)
                                      streamer: bodyStream
                                requestHeaders: self.requestHeaders
                                  onCompletion: ^(id response, NSError *error) {
@@ -384,7 +383,7 @@ static int findCommonAncestor(TD_Revision* rev, NSArray* possibleIDs);
     }
 
     [self asyncTaskStarted];
-    NSString* path = $sprintf(@"/%@?new_edits=false", TDEscapeID(rev.docID));
+    NSString* path = $sprintf(@"%@?new_edits=false", TDEscapeID(rev.docID));
     [self sendAsyncRequest: @"PUT"
                       path: path
                       body: rev.properties

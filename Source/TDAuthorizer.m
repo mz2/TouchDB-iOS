@@ -31,6 +31,17 @@
 }
 
 
+- (id)initWithURL: (NSURL*)url
+{
+    Log(@"TDBasicAuthorizer initWith <%@>", url);//TEMP
+    NSURLCredential *cred = [url my_credentialForRealm: nil
+                                  authenticationMethod: NSURLAuthenticationMethodHTTPBasic];
+    if (!cred)
+        return nil;
+    return [self initWithCredential: cred];
+}
+
+
 - (NSString*) authorizeURLRequest: (NSMutableURLRequest*)request
                          forRealm: (NSString*)realm
 {
@@ -60,6 +71,25 @@
 - (NSString*) description {
     return $sprintf(@"%@[%@/****]", self.class, _credential.user);
 }
+
+#if 0
+// If enabled, these methods would make TouchDB use cookie-based login intstead of basic auth;
+// but there's not really much point in doing so, as such logins expire, which would cause trouble
+// with long-lived replications.
+
+- (NSString*) loginPath {
+    return @"/_session";
+}
+
+- (NSDictionary*) loginParametersForSite: (NSURL*)site {
+    NSString* username = _credential.user;
+    NSString* password = _credential.password;
+    if (username && password) {
+        return @{@"name": username, @"password": password};
+    }
+    return nil;
+}
+#endif
 
 @end
 

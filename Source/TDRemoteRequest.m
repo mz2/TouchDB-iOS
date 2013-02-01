@@ -213,7 +213,7 @@
     LogTo(RemoteRequest, @"Got challenge: %@ (%@)", challenge, authMethod);
     if ($equal(authMethod, NSURLAuthenticationMethodHTTPBasic)) {
         _challenged = true;
-        if (challenge.previousFailureCount == 0) {
+        if (!_authorizer && challenge.previousFailureCount == 0) {
             NSURLCredential* cred = [_request.URL my_credentialForRealm: space.realm
                                                    authenticationMethod: authMethod];
             if (cred) {
@@ -319,7 +319,7 @@
 
 
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
-    LogTo(RemoteRequest, @"%@: Got %lu bytes", self, (unsigned long)data.length);
+    LogTo(RemoteRequestVerbose, @"%@: Got %lu bytes", self, (unsigned long)data.length);
 }
 
 

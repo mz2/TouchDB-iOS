@@ -26,7 +26,6 @@ extern NSString* TDReplicatorStoppedNotification;
     NSThread* _thread;
     TD_Database* __weak _db;
     NSURL* _remote;
-    TDReachability* _host;
     BOOL _continuous;
     NSString* _filterName;
     NSDictionary* _filterParameters;
@@ -46,6 +45,8 @@ extern NSString* TDReplicatorStoppedNotification;
     id<TDAuthorizer> _authorizer;
     NSDictionary* _options;
     NSDictionary* _requestHeaders;
+    @private
+    TDReachability* _host;
 }
 
 + (NSString *)progressChangedNotification;
@@ -68,6 +69,9 @@ extern NSString* TDReplicatorStoppedNotification;
 @property (copy) NSDictionary* requestHeaders;
 
 @property (strong) id<TDAuthorizer> authorizer;
+
+/** Do these two replicators have identical settings? */
+- (bool) hasSameSettingsAs: (TDReplicator*)other;
 
 /** Starts the replicator.
     Replicators run asynchronously so nothing will happen until later.

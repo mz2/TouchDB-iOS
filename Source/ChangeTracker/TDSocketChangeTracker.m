@@ -34,23 +34,43 @@
 
 
 - (BOOL) start {
-    NSAssert(!_trackingInput, @"Already started");
+    if (_trackingInput)
+        return NO;
 
     LogTo(ChangeTracker, @"%@: Starting...", self);
     [super start];
-    
+
+    NSURL* url = self.changesFeedURL;
     CFHTTPMessageRef request = CFHTTPMessageCreateRequest(NULL, CFSTR("GET"),
-                                                          (__bridge CFURLRef)self.changesFeedURL,
+                                                          (__bridge CFURLRef)url,
                                                           kCFHTTPVersion1_1);
     Assert(request);
     
-    // Add headers.
+    // Add headers from my .requestHeaders property:
     [self.requestHeaders enumerateKeysAndObjectsUsingBlock: ^(id key, id value, BOOL *stop) {
         CFHTTPMessageSetHeaderFieldValue(request, (__bridge CFStringRef)key, (__bridge CFStringRef)value);
     }];
-    
+
+    // Add cookie headers from the NSHTTPCookieStorage:
+    NSArray* cookies = [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookiesForURL: url];
+    NSDictionary* cookieHeaders = [NSHTTPCookie requestHeaderFieldsWithCookies: cookies];
+    for (NSString* headerName in cookieHeaders) {
+        CFHTTPMessageSetHeaderFieldValue(request,
+                                         (__bridge CFStringRef)headerName,
+                                         (__bridge CFStringRef)cookieHeaders[headerName]);
+    }
+
+    // If this is a retry, set auth headers from the credential we got:
     if (_unauthResponse && _credential) {
         NSString* password = _credential.password;
+        if (!password) {
+            // For some reason the password sometimes isn't accessible, even though we checked
+            // .hasPassword when setting _credential earlier. (See #195.) Keychain bug??
+            // If this happens, try looking up the credential again:
+            LogTo(ChangeTracker, @"Huh, couldn't get password of %@; trying again", _credential);
+            _credential = [self credentialForResponse: _unauthResponse];
+            password = _credential.password;
+        }
         if (password) {
             CFIndex unauthStatus = CFHTTPMessageGetResponseStatusCode(_unauthResponse);
             Assert(CFHTTPMessageAddAuthentication(request, _unauthResponse,
@@ -59,7 +79,10 @@
                                                   kCFHTTPAuthenticationSchemeBasic,
                                                   unauthStatus == 407));
         } else {
-            Warn(@"%@: Unable to get password of %@", self, _credential);
+            Warn(@"%@: Unable to get password of credential %@", self, _credential);
+            _credential = nil;
+            CFRelease(_unauthResponse);
+            _unauthResponse = NULL;
         }
     } else if (_authorizer) {
         NSString* authHeader = [_authorizer authorizeHTTPMessage: request forRealm: nil];
@@ -68,6 +91,7 @@
                                              (__bridge CFStringRef)(authHeader));
     }
 
+    // Now open the connection:
     CFReadStreamRef cfInputStream = CFReadStreamCreateForHTTPRequest(NULL, request);
     CFRelease(request);
     if (!cfInputStream)
@@ -380,7 +404,6 @@
         [self performSelector: @selector(start) withObject: nil afterDelay: retryDelay];
     } else {
         Warn(@"%@: Can't connect, giving up: %@", self, error);
-        [self stop];
 
         // Map lower-level errors from CFStream to higher-level NSURLError ones:
         if ($equal(error.domain, NSPOSIXErrorDomain)) {
@@ -391,11 +414,13 @@
         }
 
         self.error = error;
+        [self stop];
     }
 }
 
 
 - (void) stream: (NSStream*)stream handleEvent: (NSStreamEvent)eventCode {
+    __unused id keepMeAround = self; // retain myself so I can't be dealloced during this method
     switch (eventCode) {
         case NSStreamEventHasBytesAvailable: {
             LogTo(ChangeTracker, @"%@: HasBytesAvailable %@", self, stream);

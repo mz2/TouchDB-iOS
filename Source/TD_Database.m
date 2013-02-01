@@ -596,6 +596,16 @@ static BOOL removeItemIfExists(NSString* path, NSError** outError) {
 }
 
 
+- (SequenceNumber) getSequenceOfDocument: (SInt64)docNumericID
+                                revision: (NSString*)revID
+                             onlyCurrent: (BOOL)onlyCurrent
+{
+    NSString* sql = $sprintf(@"SELECT sequence FROM revs WHERE doc_id=? AND revid=? %@ LIMIT 1",
+                             (onlyCurrent ? @"AND current=1" : @""));
+    return [_fmdb longLongForQuery: sql, @(docNumericID), revID];
+}
+
+
 #pragma mark - HISTORY:
 
 
@@ -903,6 +913,41 @@ const TDChangesOptions kDefaultTDChangesOptions = {UINT_MAX, 0, NO, NO, YES};
         return kTDStatusDBError;
     [_views removeObjectForKey: name];
     return _fmdb.changes ? kTDStatusOK : kTDStatusNotFound;
+}
+
+
+- (TD_View*) compileViewNamed: (NSString*)tdViewName status: (TDStatus*)outStatus {
+    TD_View* view = [self existingViewNamed: tdViewName];
+    if (view && view.mapBlock)
+        return view;
+    
+    // No TouchDB view is defined, or it hasn't had a map block assigned;
+    // see if there's a CouchDB view definition we can compile:
+    NSArray* path = [tdViewName componentsSeparatedByString: @"/"];
+    if (path.count != 2) {
+        *outStatus = kTDStatusNotFound;
+        return nil;
+    }
+    TD_Revision* rev = [self getDocumentWithID: [@"_design/" stringByAppendingString: path[0]]
+                                    revisionID: nil];
+    if (!rev) {
+        *outStatus = kTDStatusNotFound;
+        return nil;
+    }
+    NSDictionary* views = $castIf(NSDictionary, rev[@"views"]);
+    NSDictionary* viewProps = $castIf(NSDictionary, views[path[1]]);
+    if (!viewProps) {
+        *outStatus = kTDStatusNotFound;
+        return nil;
+    }
+    
+    // If there is a CouchDB view, see if it can be compiled from source:
+    view = [self viewNamed: tdViewName];
+    if (![view compileFromProperties: viewProps]) {
+        *outStatus = kTDStatusCallbackError;
+        return nil;
+    }
+    return view;
 }
 
 

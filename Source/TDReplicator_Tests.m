@@ -152,7 +152,7 @@ TestCase(TDPuller) {
     [db open];
     
     id lastSeq = replic8(db, kRemoteDBURLStr, NO, nil);
-    CAssertEqual(lastSeq, @"2");
+    CAssertEqual(lastSeq, @2);
     
     CAssertEq(db.documentCount, 2u);
     CAssertEq(db.lastSequence, 3);
@@ -207,6 +207,15 @@ TestCase(TDPuller_FromCouchApp) {
 }
 
 
+static TDReplicator* findActiveReplicator(TD_Database* db, NSURL* remote, BOOL isPush) {
+    for (TDReplicator* repl in db.activeReplicators) {
+        if (repl.db == db && $equal(repl.remote, remote) && repl.isPush == isPush)
+            return repl;
+    }
+    return nil;
+}
+
+
 TestCase(TDReplicatorManager) {
     RequireTestCase(ParseReplicatorProperties);
     TD_DatabaseManager* server = [TD_DatabaseManager createEmptyAtTemporaryPath: @"TDReplicatorManagerTest"];
@@ -249,7 +258,7 @@ TestCase(TDReplicatorManager) {
     CAssert([newRev[@"_replication_state_time"] longLongValue] >= 1000);
     
     // Check that a TDReplicator exists:
-    TDReplicator* repl = [sourceDB activeReplicatorWithRemoteURL: remote push: YES];
+    TDReplicator* repl = findActiveReplicator(sourceDB, remote, YES);
     CAssert(repl);
     CAssertEqual(repl.sessionID, sessionID);
     CAssert(repl.running);
@@ -271,7 +280,7 @@ TestCase(TDReplicatorManager) {
     CAssert([newRev[@"_replication_state_time"] longLongValue] >= 1000);
     
     // Check that this restarted the replicator:
-    TDReplicator* newRepl = [sourceDB activeReplicatorWithRemoteURL: remote push: YES];
+    TDReplicator* newRepl = findActiveReplicator(sourceDB, remote, YES);
     CAssert(newRepl);
     CAssert(newRepl != repl);
     CAssertEqual(newRepl.sessionID, sessionID);
@@ -285,9 +294,19 @@ TestCase(TDReplicatorManager) {
 }
 
 
+@interface TD_DatabaseManager (Internal)
+- (TDStatus) parseReplicatorProperties: (NSDictionary*)properties
+                            toDatabase: (TD_Database**)outDatabase   // may be NULL
+                                remote: (NSURL**)outRemote          // may be NULL
+                                isPush: (BOOL*)outIsPush
+                          createTarget: (BOOL*)outCreateTarget
+                               headers: (NSDictionary**)outHeaders
+                            authorizer: (id<TDAuthorizer>*)outAuthorizer;
+@end
+
+
 TestCase(ParseReplicatorProperties) {
     TD_DatabaseManager* dbManager = [TD_DatabaseManager createEmptyAtTemporaryPath: @"TDReplicatorManagerTest"];
-    TDReplicatorManager* replManager = [dbManager replicatorManager];
     TD_Database* localDB = [dbManager databaseNamed: @"foo"];
 
     TD_Database* db = nil;
@@ -299,13 +318,13 @@ TestCase(ParseReplicatorProperties) {
     props = $dict({@"source", @"foo"},
                   {@"target", @"http://example.com"},
                   {@"create_target", $true});
-    CAssertEq(200, [replManager parseReplicatorProperties: props
-                                               toDatabase: &db
-                                                   remote: &remote
-                                                   isPush: &isPush
-                                             createTarget: &createTarget
-                                                  headers: &headers
-                                               authorizer: NULL]);
+    CAssertEq(200, [dbManager parseReplicatorProperties: props
+                                             toDatabase: &db
+                                                 remote: &remote
+                                                 isPush: &isPush
+                                           createTarget: &createTarget
+                                                headers: &headers
+                                             authorizer: NULL]);
     CAssertEq(db, localDB);
     CAssertEqual(remote, $url(@"http://example.com"));
     CAssertEq(isPush, YES);
@@ -314,13 +333,13 @@ TestCase(ParseReplicatorProperties) {
     
     props = $dict({@"source", @"touchdb:///foo"},
                   {@"target", @"foo"});
-    CAssertEq(200, [replManager parseReplicatorProperties: props
-                                               toDatabase: &db
-                                                   remote: &remote
-                                                   isPush: &isPush
-                                             createTarget: &createTarget
-                                                  headers: &headers
-                                               authorizer: NULL]);
+    CAssertEq(200, [dbManager parseReplicatorProperties: props
+                                             toDatabase: &db
+                                                 remote: &remote
+                                                 isPush: &isPush
+                                           createTarget: &createTarget
+                                                headers: &headers
+                                             authorizer: NULL]);
     CAssertEq(db, localDB);
     CAssertEqual(remote, $url(@"touchdb:///foo"));
     CAssertEq(isPush, NO);
@@ -336,13 +355,13 @@ TestCase(ParseReplicatorProperties) {
                                     {@"auth", $dict({@"oauth", oauthDict})})},
                   {@"target", @"foo"});
     id<TDAuthorizer> authorizer = nil;
-    CAssertEq(200, [replManager parseReplicatorProperties: props
-                                               toDatabase: &db
-                                                   remote: &remote
-                                                   isPush: &isPush
-                                             createTarget: &createTarget
-                                                  headers: &headers
-                                               authorizer: &authorizer]);
+    CAssertEq(200, [dbManager parseReplicatorProperties: props
+                                             toDatabase: &db
+                                                 remote: &remote
+                                                 isPush: &isPush
+                                           createTarget: &createTarget
+                                                headers: &headers
+                                             authorizer: &authorizer]);
     CAssertEq(db, localDB);
     CAssertEqual(remote, $url(@"http://example.com"));
     CAssertEq(isPush, NO);

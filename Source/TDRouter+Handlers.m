@@ -58,45 +58,22 @@
 }
 
 - (TDStatus) do_POST_replicate {
-    // Extract the parameters from the JSON request body:
-    // http://wiki.apache.org/couchdb/Replication
-    TD_Database* db;
-    NSURL* remote;
-    BOOL push, createTarget;
-    NSDictionary* headers;
-    id<TDAuthorizer> authorizer;
     NSDictionary* body = self.bodyAsDictionary;
-    TDStatus status = [_dbManager.replicatorManager parseReplicatorProperties: body
-                                                                   toDatabase: &db remote: &remote
-                                                                       isPush: &push
-                                                                 createTarget: &createTarget
-                                                                      headers: &headers
-                                                                   authorizer: &authorizer];
-    if (TDStatusIsError(status))
+    TDStatus status;
+    TDReplicator* repl = [_dbManager replicatorWithProperties: body status: &status];
+    if (!repl)
         return status;
-    
-    BOOL continuous = [$castIf(NSNumber, body[@"continuous"]) boolValue];
-    BOOL cancel = [$castIf(NSNumber, body[@"cancel"]) boolValue];
-    if (!cancel) {
+
+    if ([$castIf(NSNumber, body[@"cancel"]) boolValue]) {
+        // Cancel replication:
+        TDReplicator* activeRepl = [repl.db activeReplicatorLike: repl];
+        if (!activeRepl)
+            return kTDStatusNotFound;
+        [activeRepl stop];
+    } else {
         // Start replication:
-        TDReplicator* repl = [db replicatorWithRemoteURL: remote push: push continuous: continuous];
-        if (!repl)
-            return kTDStatusServerError;
-        repl.filterName = $castIf(NSString, body[@"filter"]);;
-        repl.filterParameters = $castIf(NSDictionary, body[@"query_params"]);
-        repl.options = body;
-        repl.requestHeaders = headers;
-        repl.authorizer = authorizer;
-        if (push)
-            ((TDPusher*)repl).createTarget = createTarget;
         [repl start];
         _response.bodyObject = $dict({@"session_id", repl.sessionID});
-    } else {
-        // Cancel replication:
-        TDReplicator* repl = [db activeReplicatorWithRemoteURL: remote push: push];
-        if (!repl)
-            return kTDStatusNotFound;
-        [repl stop];
     }
     return kTDStatusOK;
 }
@@ -295,14 +272,17 @@
                     Assert(rev.revID);
                     if (!noNewEdits)
                         result = $dict({@"id", rev.docID}, {@"rev", rev.revID}, {@"ok", $true});
+                } else if (status >= 500) {
+                    return status;  // abort the whole thing if something goes badly wrong
                 } else if (allOrNothing) {
                     return status;  // all_or_nothing backs out if there's any error
-                } else if (status == kTDStatusForbidden) {
-                    result = $dict({@"id", docID}, {@"error", @"validation failed"});
-                } else if (status == kTDStatusConflict) {
-                    result = $dict({@"id", docID}, {@"error", @"conflict"});
                 } else {
-                    return status;  // abort the whole thing if something goes badly wrong
+                    NSString* error = nil;
+                    if (status == kTDStatusForbidden)
+                        error = @"validation failed";
+                    else
+                        TDStatusToHTTPStatus(status, &error);
+                    result = $dict({@"id", docID}, {@"error", error});
                 }
                 if (result)
                     [results addObject: result];
@@ -857,7 +837,10 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
 }
 
 
-- (TDStatus) updateAttachment: (NSString*)attachment docID: (NSString*)docID body: (NSData*)body {
+- (TDStatus) updateAttachment: (NSString*)attachment
+                        docID: (NSString*)docID
+                         body: (TDBlobStoreWriter*)body
+{
     TDStatus status;
     TD_Revision* rev = [_db updateAttachment: attachment 
                                        body: body
@@ -877,71 +860,47 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
 
 
 - (TDStatus) do_PUT: (TD_Database*)db docID: (NSString*)docID attachment: (NSString*)attachment {
-    return [self updateAttachment: attachment
-                            docID: docID
-                             body: (_request.HTTPBody ?: [NSData data])];
+    TDBlobStoreWriter* blob = db.attachmentWriter;
+    NSInputStream* bodyStream = _request.HTTPBodyStream;
+    if (bodyStream) {
+        // OPT: Should read this asynchronously
+        NSMutableData* buffer = [NSMutableData dataWithLength: 32768];
+        NSInteger bytesRead;
+        do {
+            bytesRead = [bodyStream read: buffer.mutableBytes maxLength: buffer.length];
+            if (bytesRead > 0) {
+                [blob appendData: [NSData dataWithBytesNoCopy: buffer.mutableBytes
+                                                       length: bytesRead freeWhenDone: NO]];
+            }
+        } while (bytesRead > 0);
+        if (bytesRead < 0)
+            return kTDStatusBadAttachment;
+        
+    } else {
+        NSData* body = _request.HTTPBody;
+        if (body)
+            [blob appendData: body];
+    }
+    [blob finish];
+
+    return [self updateAttachment: attachment docID: docID body: blob];
 }
 
 
 - (TDStatus) do_DELETE: (TD_Database*)db docID: (NSString*)docID attachment: (NSString*)attachment {
-    return [self updateAttachment: attachment
-                            docID: docID
-                             body: nil];
+    return [self updateAttachment: attachment docID: docID body: nil];
 }
 
 
 #pragma mark - VIEW QUERIES:
 
 
-- (TD_View*) compileView: (NSString*)viewName fromProperties: (NSDictionary*)viewProps {
-    NSString* language = viewProps[@"language"] ?: @"javascript";
-    NSString* mapSource = viewProps[@"map"];
-    if (!mapSource)
-        return nil;
-    TDMapBlock mapBlock = [[TD_View compiler] compileMapFunction: mapSource language: language];
-    if (!mapBlock) {
-        Warn(@"View %@ has unknown map function: %@", viewName, mapSource);
-        return nil;
-    }
-    NSString* reduceSource = viewProps[@"reduce"];
-    TDReduceBlock reduceBlock = NULL;
-    if (reduceSource) {
-        reduceBlock =[[TD_View compiler] compileReduceFunction: reduceSource language: language];
-        if (!reduceBlock) {
-            Warn(@"View %@ has unknown reduce function: %@", viewName, reduceSource);
-            return nil;
-        }
-    }
-    
-    TD_View* view = [_db viewNamed: viewName];
-    [view setMapBlock: mapBlock reduceBlock: reduceBlock version: @"1"];
-    
-    NSDictionary* options = $castIf(NSDictionary, viewProps[@"options"]);
-    if ($equal(options[@"collation"], @"raw"))
-        view.collation = kTDViewCollationRaw;
-    return view;
-}
-
-
 - (TDStatus) queryDesignDoc: (NSString*)designDoc view: (NSString*)viewName keys: (NSArray*)keys {
     NSString* tdViewName = $sprintf(@"%@/%@", designDoc, viewName);
-    TD_View* view = [_db existingViewNamed: tdViewName];
-    if (!view || !view.mapBlock) {
-        // No TouchDB view is defined, or it hasn't had a map block assigned;
-        // see if there's a CouchDB view definition we can compile:
-        TD_Revision* rev = [_db getDocumentWithID: [@"_design/" stringByAppendingString: designDoc]
-                                      revisionID: nil];
-        if (!rev)
-            return kTDStatusNotFound;
-        NSDictionary* views = $castIf(NSDictionary, rev[@"views"]);
-        NSDictionary* viewProps = $castIf(NSDictionary, views[viewName]);
-        if (!viewProps)
-            return kTDStatusNotFound;
-        // If there is a CouchDB view, see if it can be compiled from source:
-        view = [self compileView: tdViewName fromProperties: viewProps];
-        if (!view)
-            return kTDStatusDBError;
-    }
+    TDStatus status;
+    TD_View* view = [_db compileViewNamed: tdViewName status: &status];
+    if (!view)
+        return status;
     
     TDQueryOptions options;
     if (![self getQueryOptions: &options])
@@ -949,7 +908,7 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
     if (keys)
         options.keys = keys;
     
-    TDStatus status = [view updateIndex];
+    status = [view updateIndex];
     if (status >= kTDStatusBadRequest)
         return status;
     SequenceNumber lastSequenceIndexed = view.lastSequenceIndexed;
@@ -1003,9 +962,10 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
     if ([self cacheWithEtag: $sprintf(@"%lld", _db.lastSequence)])  // conditional GET
         return kTDStatusNotModified;
 
-    TD_View* view = [self compileView: @"@@TEMPVIEW@@" fromProperties: props];
-    if (!view)
-        return kTDStatusDBError;
+    TD_View* view = [_db viewNamed: @"@@TEMPVIEW@@"];
+    if (![view compileFromProperties: props])
+        return kTDStatusBadRequest;
+
     @try {
         TDStatus status = [view updateIndex];
         if (status >= kTDStatusBadRequest)
