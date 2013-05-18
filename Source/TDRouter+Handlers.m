@@ -536,6 +536,11 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
                                                          error: NULL]);
 }
 
+- (TDStatus)do_OPTIONS: (TD_Database *)db
+{
+    return kTDStatusOK;
+}
+
 - (TDStatus)do_OPTIONS: (TD_Database *)db docID:(NSString *)docID {
     return kTDStatusOK;
 }

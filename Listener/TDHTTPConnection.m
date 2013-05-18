@@ -51,8 +51,11 @@
 
 
 - (BOOL)supportsMethod:(NSString *)method atPath:(NSString *)path {
-    return $equal(method, @"POST") || $equal(method, @"PUT") || $equal(method,  @"DELETE")
-        || [super supportsMethod: method atPath: path];
+    return $equal(method, @"POST")
+            || $equal(method, @"PUT")
+            || $equal(method, @"DELETE")
+            || $equal(method, @"OPTIONS")
+            || [super supportsMethod: method atPath: path];
 }
 
 
