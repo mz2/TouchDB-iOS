@@ -536,17 +536,21 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
                                                          error: NULL]);
 }
 
-- (TDStatus)do_OPTIONS: (TD_Database *)db
+- (TDStatus)do_OPTIONS:(TD_Database *)db
 {
     return kTDStatusOK;
 }
 
-- (TDStatus)do_OPTIONS_changes: (TD_Database *)db
+- (TDStatus)do_OPTIONS_changes:(TD_Database *)db
 {
     return kTDStatusOK;
 }
 
-- (TDStatus)do_OPTIONS: (TD_Database *)db docID:(NSString *)docID {
+- (TDStatus)do_OPTIONS:(TD_Database *)db docID:(NSString *)docID {
+    return kTDStatusOK;
+}
+
+- (TDStatus)do_OPTIONS:(TD_Database *)db designDocID:(NSString *)docID view:(NSString *)view {
     return kTDStatusOK;
 }
 
