@@ -359,6 +359,7 @@
 		27F1E4A61697995C00F0E50F /* TDJSViewCompiler.m in Sources */ = {isa = PBXBuildFile; fileRef = 27F1E4A51697995C00F0E50F /* TDJSViewCompiler.m */; };
 		27F1E4A8169799DA00F0E50F /* JavaScriptCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 27F1E4A7169799DA00F0E50F /* JavaScriptCore.framework */; };
 		27F1E4AB16979A0B00F0E50F /* TDJSViewCompiler_Test.m in Sources */ = {isa = PBXBuildFile; fileRef = 27F1E4AA16979A0B00F0E50F /* TDJSViewCompiler_Test.m */; };
+		5FA22FD6176E08BD00CE5949 /* Logging.h in Headers */ = {isa = PBXBuildFile; fileRef = 27F0751111CDC7F900E9A2AB /* Logging.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		DA023B4614BCA94C008184BB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 27F0745C11CD50A600E9A2AB /* Foundation.framework */; };
 		DA147C0C14BCA98A0052DA4D /* TDListener.m in Sources */ = {isa = PBXBuildFile; fileRef = 275315DF14ACF0A20065964D /* TDListener.m */; };
 		DA147C0D14BCA98A0052DA4D /* TDHTTPConnection.m in Sources */ = {isa = PBXBuildFile; fileRef = 2753160B14ACFC2A0065964D /* TDHTTPConnection.m */; };
@@ -1502,6 +1503,7 @@
 				2753158414ACEFC90065964D /* HTTPMessage.h in Headers */,
 				2753158814ACEFC90065964D /* HTTPResponse.h in Headers */,
 				2753158A14ACEFC90065964D /* HTTPServer.h in Headers */,
+				5FA22FD6176E08BD00CE5949 /* Logging.h in Headers */,
 				2753158E14ACEFC90065964D /* HTTPAsyncFileResponse.h in Headers */,
 				2753159214ACEFC90065964D /* HTTPDataResponse.h in Headers */,
 				2753159614ACEFC90065964D /* HTTPDynamicFileResponse.h in Headers */,

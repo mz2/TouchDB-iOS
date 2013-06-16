@@ -3,7 +3,7 @@
 	url = git://github.com/couchbaselabs/fmdb.git
 [submodule "vendor/CocoaHTTPServer"]
 	path = vendor/CocoaHTTPServer
-	url = git://github.com/mz2/CocoaHTTPServer.git
+	url = git@github.com:mz2/CocoaHTTPServer.git
 [submodule "vendor/oauthconsumer"]
 	path = vendor/oauthconsumer
 	url = git://github.com/couchbaselabs/ios-oauthconsumer.git
