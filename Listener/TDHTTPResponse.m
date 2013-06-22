@@ -51,11 +51,8 @@
         };
 
         if (connection.listener.readOnly) {
-            __weak TDRouter *weakRouter = router;
-            
+            NSString* method = router.request.HTTPMethod;
             router.onAccessCheck = ^TDStatus(TD_Database* db, NSString* docID, SEL action) {
-                TDRouter *strongRouter = weakRouter;
-                NSString* method = strongRouter.request.HTTPMethod;
                 if ([method isEqualToString: @"GET"] || [method isEqualToString: @"HEAD"])
                     return kTDStatusOK;
                 if ([method isEqualToString: @"POST"]) {
@@ -67,7 +64,7 @@
                 return kTDStatusForbidden;
             };
         }
-        
+
         // Run the router, asynchronously:
         LogTo(TDListenerVerbose, @"%@: Starting...", self);
         [router start];

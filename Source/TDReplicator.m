@@ -124,7 +124,7 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
 }
 
 
-@synthesize db=_db, remote=_remote, filterName=_filterName, filterParameters=_filterParameters;
+@synthesize db=_db, remote=_remote, filterName=_filterName, filterParameters=_filterParameters, docIDs = _docIDs;
 @synthesize running=_running, online=_online, active=_active, continuous=_continuous;
 @synthesize error=_error, sessionID=_sessionID, options=_options;
 @synthesize changesProcessed=_changesProcessed, changesTotal=_changesTotal;
@@ -141,7 +141,7 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
 - (bool) hasSameSettingsAs: (TDReplicator*)other {
     return _db == other->_db && $equal(_remote, other->_remote) && self.isPush == other.isPush
         && _continuous == other->_continuous && $equal(_filterName, other->_filterName)
-        && $equal(_filterParameters, other->_filterParameters) && $equal(_options, other->_options)
+        && $equal(_filterParameters, other->_filterParameters) && $equal(_options, other->_options) && $equal(_docIDs, other->_docIDs)
         && $equal(_requestHeaders, other->_requestHeaders);
 }
 
@@ -164,7 +164,7 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
 
 
 - (void) postProgressChanged {
-    LogTo(SyncVerbose, @"%@: postProgressChanged (%u/%u, active=%d (batch=%u, net=%u), online=%d)", 
+    LogTo(Sync, @"%@: postProgressChanged (%u/%u, active=%d (batch=%u, net=%u), online=%d)", 
           self, (unsigned)_changesProcessed, (unsigned)_changesTotal,
           _active, (unsigned)_batcher.count, _asyncTaskCount, _online);
     NSNotification* n = [NSNotification notificationWithName: TDReplicatorProgressChangedNotification
@@ -227,8 +227,11 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
                 ];
 
     // If client didn't set an authorizer, use basic auth if credential is available:
-    if (!_authorizer)
+    if (!_authorizer) {
         _authorizer = [[TDBasicAuthorizer alloc] initWithURL: _remote];
+        if (_authorizer)
+            LogTo(SyncVerbose, @"%@: Found credential, using %@", self, _authorizer);
+    }
 
     self.running = YES;
     _startTime = CFAbsoluteTimeGetCurrent();
@@ -411,7 +414,6 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
 
 - (void) addToInbox: (TD_Revision*)rev {
     Assert(_running);
-    LogTo(SyncVerbose, @"%@: Received #%lld %@", self, rev.sequence, rev);
     [_batcher queueObject: rev];
     [self updateActive];
 }
@@ -475,10 +477,11 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
         return;
     }
 
-    LogTo(Sync, @"%@: Logging in with %@ at %@ ...", self, _authorizer.class, _authorizer.loginPath);
+    NSString* loginPath = [_authorizer loginPathForSite: _remote];
+    LogTo(Sync, @"%@: Logging in with %@ at %@ ...", self, _authorizer.class, loginPath);
     [self asyncTaskStarted];
     [self sendAsyncRequest: @"POST"
-                      path: _authorizer.loginPath
+                      path: loginPath
                       body: loginParameters
               onCompletion: ^(id result, NSError *error) {
                   if (error) {
@@ -521,6 +524,11 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
                                          onCompletion: ^(id result, NSError* error) {
         TDReplicator *strongSelf = weakSelf;
         [strongSelf removeRemoteRequest: req];
+        id<TDAuthorizer> auth = req.authorizer;
+        if (auth && auth != _authorizer && error.code != 401) {
+            LogTo(SyncVerbose, @"%@: Updated to %@", self, auth);
+            _authorizer = auth;
+        }
         onCompletion(result, error);
     }];
     req.authorizer = _authorizer;
@@ -595,21 +603,21 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
                   onCompletion: ^(id response, NSError* error) {
                   // Got the response:
                   if (error && error.code != kTDStatusNotFound) {
+                      LogTo(Sync, @"%@: Error fetching last sequence: %@", self, error.localizedDescription);
                       self.error = error;
                   } else {
                       if (error.code == kTDStatusNotFound)
                           [self maybeCreateRemoteDB];
                       response = $castIf(NSDictionary, response);
                       self.remoteCheckpoint = response;
-                      NSString* remoteLastSequence = $castIf(NSString,
-                                                        response[@"lastSequence"]);
+                      NSString* remoteLastSequence = response[@"lastSequence"];
 
                       if ($equal(remoteLastSequence, localLastSequence)) {
                           _lastSequence = localLastSequence;
                           LogTo(Sync, @"%@: Replicating from lastSequence=%@", self, _lastSequence);
                       } else {
-                          LogTo(Sync, @"%@: lastSequence mismatch: I had %@, remote had %@",
-                                self, localLastSequence, remoteLastSequence);
+                          LogTo(Sync, @"%@: lastSequence mismatch: I had %@, remote had %@ (response = %@)",
+                                self, localLastSequence, remoteLastSequence, response);
                       }
                       [self beginReplicating];
                   }
@@ -640,7 +648,7 @@ NSString* TDReplicatorStoppedNotification = @"TDReplicatorStopped";
     NSMutableDictionary* body = [_remoteCheckpoint mutableCopy];
     if (!body)
         body = $mdict();
-    [body setValue: _lastSequence forKey: @"lastSequence"];
+    [body setValue: _lastSequence.description forKey: @"lastSequence"]; // always save as a string
     
     _savingCheckpoint = YES;
     NSString* checkpointID = self.remoteCheckpointDocID;

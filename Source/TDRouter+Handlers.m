@@ -278,11 +278,8 @@
                     return status;  // all_or_nothing backs out if there's any error
                 } else {
                     NSString* error = nil;
-                    if (status == kTDStatusForbidden)
-                        error = @"validation failed";
-                    else
-                        TDStatusToHTTPStatus(status, &error);
-                    result = $dict({@"id", docID}, {@"error", error});
+                    status = TDStatusToHTTPStatus(status, &error);
+                    result = $dict({@"id", docID}, {@"error", error}, {@"status", @(status)});
                 }
                 if (result)
                     [results addObject: result];
@@ -840,7 +837,13 @@ static NSArray* parseJSONRevArrayQuery(NSString* queryStr) {
             if (!$equal(rev.docID, docID) || !rev.revID)
                 return kTDStatusBadID;
             NSArray* history = [TD_Database parseCouchDBRevisionHistory: body.properties];
-            return [_db forceInsert: rev revisionHistory: history source: nil];
+            TDStatus status = [_db forceInsert: rev revisionHistory: history source: nil];
+            if (!TDStatusIsError(status)) {
+                _response.bodyObject = $dict({@"ok", $true},
+                                             {@"id", rev.docID},
+                                             {@"rev", rev.revID});
+            }
+            return status;
         }
     }];
 }
