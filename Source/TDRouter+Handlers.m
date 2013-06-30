@@ -421,8 +421,9 @@
 
 
 - (void) dbChanged: (NSNotification*)n {
+    // Prevent myself from being dealloced if my client finishes during the call (see issue #266)
     id retainSelf = self;
-    
+
     NSDictionary* userInfo = n.userInfo;
     TD_Revision* rev = userInfo[@"rev"];
     TD_Revision* winningRev = userInfo[@"winner"];
