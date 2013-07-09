@@ -6,7 +6,7 @@
 	url = git://github.com/couchbaselabs/ios-oauthconsumer.git
 [submodule "vendor/MYUtilities"]
 	path = vendor/MYUtilities
-	url = https://github.com/mz2/MYUtilities.git
+	url = git@github.com:mz2/MYUtilities.git
 [submodule "vendor/CocoaHTTPServer"]
 	path = vendor/CocoaHTTPServer
 	url = git@github.com:mz2/CocoaHTTPServer.git
