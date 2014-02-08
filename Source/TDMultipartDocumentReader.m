@@ -134,13 +134,25 @@
 
 #pragma mark - ASYNCHRONOUS MODE:
 
+static NSMutableSet *__pendingReads;
+static dispatch_semaphore_t __pendingReadsSemaphore;
 
 + (TDStatus) readStream: (NSInputStream*)stream
                  ofType: (NSString*)contentType
              toDatabase: (TD_Database*)database
                    then: (TDMultipartDocumentReaderCompletionBlock)onCompletion
 {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        __pendingReads = [NSMutableSet set];
+        __pendingReadsSemaphore = dispatch_semaphore_create(1);
+    });
+
+    dispatch_semaphore_wait(__pendingReadsSemaphore, DISPATCH_TIME_FOREVER);
     TDMultipartDocumentReader* reader = [[self alloc] initWithDatabase: database];
+    [__pendingReads addObject:reader];
+    dispatch_semaphore_signal(__pendingReadsSemaphore);
+    
     return [reader readStream: stream ofType: contentType then: onCompletion];
 }
 
@@ -203,6 +215,10 @@
     _completionBlock(self);
     _completionBlock = nil;
       // balances -retain in -readStream:
+    
+    dispatch_semaphore_wait(__pendingReadsSemaphore, DISPATCH_TIME_FOREVER);
+    [__pendingReads removeObject:self];
+    dispatch_semaphore_signal(__pendingReadsSemaphore);
 }
 
 

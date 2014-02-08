@@ -115,6 +115,31 @@ static NSCharacterSet* kIllegalNameChars;
     return [_dir stringByAppendingPathComponent:[name stringByAppendingPathExtension:kDBExtension]];
 }
 
+- (BOOL)shouldOpenDatabaseAtPathAsReadOnly:(NSString *)path
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    BOOL isDirectory = NO;
+    
+    if ([fm fileExistsAtPath:path isDirectory:&isDirectory])
+    {
+        assert(!isDirectory);
+        BOOL readOnly = ![fm isWritableFileAtPath:path];
+        if (readOnly)
+            NSLog(@"NOTE: will open '%@' in read-only mode — database file is not writable", path);
+        return readOnly;
+    }
+    else
+    {
+        NSURL *URL = [[NSURL fileURLWithPath:path] URLByDeletingLastPathComponent];
+        if (![fm isWritableFileAtPath:URL.path])
+        {
+            NSLog(@"NOTE: will create and open '%@' in read-only mode — containing directory is not writable", path);
+            return YES;
+        }
+    }
+
+    return NO;
+}
 
 - (TD_Database*) databaseNamed: (NSString*)name create: (BOOL)create {
     if (_options.readOnly)
@@ -125,7 +150,9 @@ static NSCharacterSet* kIllegalNameChars;
         if (!path)
             return nil;
         db = [[TD_Database alloc] initWithPath: path];
-        db.readOnly = _options.readOnly;
+        
+        db.readOnly = _options.readOnly || [self shouldOpenDatabaseAtPathAsReadOnly:path];
+        
         if (!create && !db.exists) {
             return nil;
         }

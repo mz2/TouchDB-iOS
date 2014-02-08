@@ -64,11 +64,6 @@ static BOOL removeItemIfExists(NSString* path, NSError** outError) {
         _name = [path.lastPathComponent.stringByDeletingPathExtension copy];
         _fmdb = [[FMDatabase alloc] initWithPath: _path];
         _fmdb.busyRetryTimeout = 10;
-        
-        _readOnly = ![[NSFileManager defaultManager] isWritableFileAtPath:path];
-        if (_readOnly)
-            NSLog(@"NOTE: will open database at '%@' in read-only mode; database file is not writable", path);
-        
 #if DEBUG
         _fmdb.logsErrors = YES;
 #else
@@ -338,8 +333,17 @@ static BOOL removeItemIfExists(NSString* path, NSError** outError) {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
 }
 
-@synthesize path=_path, name=_name, fmdb=_fmdb, attachmentStore=_attachments, readOnly=_readOnly;
+@synthesize path=_path, name=_name, fmdb=_fmdb, attachmentStore=_attachments; //, readOnly=_readOnly;
 
+- (BOOL)readOnly
+{
+    return _readOnly;
+}
+
+- (void)setReadOnly:(BOOL)readOnly
+{
+    _readOnly = readOnly;
+}
 
 - (UInt64) totalDataSize {
     NSDictionary* attrs = [[NSFileManager defaultManager] attributesOfItemAtPath: _path error: NULL];
