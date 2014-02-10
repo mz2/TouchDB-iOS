@@ -141,7 +141,11 @@
                    then: (TDMultipartDocumentReaderCompletionBlock)onCompletion
 {
     TDMultipartDocumentReader* reader = [[self alloc] initWithDatabase: database];
-    return [reader readStream: stream ofType: contentType then: onCompletion];
+    return [reader readStream: stream ofType: contentType then: ^(TDMultipartDocumentReader *r){
+        id strongReader = reader;
+        onCompletion(r);
+        strongReader = nil;
+    }];
 }
 
 
